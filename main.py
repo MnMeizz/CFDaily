@@ -1,24 +1,65 @@
-from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
+import random
+import aiohttp
+from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 
-@register("helloworld", "YourName", "一个简单的 Hello World 插件", "1.0.0")
-class MyPlugin(Star):
+@register("astrbot_plugin_cf_random", "YourName", "随机推荐Codeforces题目", "1.0.0")
+class CFRandomPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
 
-    async def initialize(self):
-        """可选择实现异步的插件初始化方法，当实例化该插件类之后会自动调用该方法。"""
+    async def fetch_problems(self):
+        url = "https://codeforces.com/api/problemset.problems"
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    data = await resp.json()
+                    if data.get("status") == "OK":
+                        return data["result"]["problems"]
+                    else:
+                        logger.error(f"Codeforces API error: {data.get('comment')}")
+                        return None
+        except Exception as e:
+            logger.error(f"Request failed: {e}")
+            return None
 
-    # 注册指令的装饰器。指令名为 helloworld。注册成功后，发送 `/helloworld` 就会触发这个指令，并回复 `你好, {user_name}!`
-    @filter.command("helloworld")
-    async def helloworld(self, event: AstrMessageEvent):
-        """这是一个 hello world 指令""" # 这是 handler 的描述，将会被解析方便用户了解插件内容。建议填写。
-        user_name = event.get_sender_name()
-        message_str = event.message_str # 用户发的纯文本消息字符串
-        message_chain = event.get_messages() # 用户所发的消息的消息链 # from astrbot.api.message_components import *
-        logger.info(message_chain)
-        yield event.plain_result(f"Hello, {user_name}, 你发了 {message_str}!") # 发送一条纯文本消息
+    @filter.command("random_cf")
+    async def random_cf(self, event: AstrMessageEvent, min_rating: int = 800, max_rating: int = 3500):
+        if min_rating < 0 or max_rating < 0:
+            yield event.plain_result("❌ 分数不能为负数。")
+            return
+        if min_rating > max_rating:
+            yield event.plain_result("❌ 最低分不能大于最高分。")
+            return
+
+        problems = await self.fetch_problems()
+        if problems is None:
+            yield event.plain_result("😵 获取题目列表失败，请稍后再试～")
+            return
+
+        filtered = [
+            p for p in problems
+            if "rating" in p and min_rating <= p["rating"] <= max_rating
+        ]
+        if not filtered:
+            yield event.plain_result(f"😕 在 {min_rating}~{max_rating} 分之间没有找到题目。")
+            return
+
+        problem = random.choice(filtered)
+        name = problem.get("name", "未知标题")
+        rating = problem.get("rating", "未知")
+        contest_id = problem.get("contestId")
+        index = problem.get("index")
+        url = f"https://codeforces.com/problemset/problem/{contest_id}/{index}"
+
+        reply = (
+            f"🎲 随机Codeforces题目推荐\n"
+            f"📌 标题: {name}\n"
+            f"⭐ 难度分: {rating}\n"
+            f"🔗 链接: {url}"
+        )
+        yield event.plain_result(reply)
 
     async def terminate(self):
-        """可选择实现异步的插件销毁方法，当插件被卸载/停用时会调用。"""
+        pass
