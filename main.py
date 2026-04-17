@@ -16,7 +16,9 @@ class CFDailyPlugin(Star):
 
     # --- 数据存储辅助方法（完全不变）---
     def _get_user_key(self, user_id: str) -> str:
-        today_str = datetime.datetime.now().strftime("%Y-%m-%d")
+        # 使用北京时间
+        tz = datetime.timezone(datetime.timedelta(hours=8))
+        today_str = datetime.datetime.now(tz).strftime("%Y-%m-%d")
         return f"cf_daily_{user_id}_{today_str}"
 
     async def _get_user_usage(self, user_id: str) -> int:
