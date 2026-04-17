@@ -10,7 +10,7 @@
 
 ### 方式一：通过 Astrbot 插件商店安装（推荐）
 1. 进入 Astrbot 的管理面板。
-2. 在 **插件** 页面搜索 `CodeforcesPlugings` 或通过仓库 URL 安装。
+2. 在 **插件** 页面搜索 `CFDaily` 或通过仓库 URL 安装。
 3. 点击 **安装** 并等待加载完成。
 
 ### 方式二：手动安装
@@ -27,7 +27,7 @@ git clone https://github.com/MnMeizz/CFDaily.git
 
 | 指令 | 描述 | 示例 |
 | :--- | :--- | :--- |
-| `每日一题` | 推荐每日一题。 | `每日一题` |
+| `每日一题` | 推荐每日一题。 | `/每日一题` |
 
 ---
 
@@ -43,4 +43,4 @@ git clone https://github.com/MnMeizz/CFDaily.git
 **如果您觉得这个插件对您有帮助，欢迎给仓库点一个 ⭐ Star！**
 
 * **GitHub**: [MnMeizz](https://github.com/MnMeizz)
-* **Project Link**: [CodeforcesPlugings](https://github.com/MnMeizz/CFDaily.git)
+* **Project Link**: [CFDaily](https://github.com/MnMeizz/CFDaily.git)
