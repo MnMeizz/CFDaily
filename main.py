@@ -13,12 +13,12 @@ class CFDailyPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
         self.daily_limit = config.get("daily_limit", 1) if config else 1
+        # 读取管理员 ID（可配置为字符串，如 "123456"）
+        self.admin_id = config.get("admin_id", None) if config else None
 
     # --- 数据存储辅助方法（完全不变）---
     def _get_user_key(self, user_id: str) -> str:
-        # 使用北京时间
-        tz = datetime.timezone(datetime.timedelta(hours=0))
-        today_str = datetime.datetime.now(tz).strftime("%Y-%m-%d")
+        today_str = datetime.datetime.now().strftime("%Y-%m-%d")
         return f"cf_daily_{user_id}_{today_str}"
 
     async def _get_user_usage(self, user_id: str) -> int:
@@ -155,7 +155,7 @@ class CFDailyPlugin(Star):
             "note": note_html
         }
 
-    # --- 渲染图片并发送（仅修改背景样式，其他完全不变）---
+    # --- 渲染图片并发送（背景样式已修复，其他不变）---
     async def _render_and_send(self, event: AstrMessageEvent, problem: dict):
         contest_id = problem.get("contestId")
         index = problem.get("index")
@@ -195,7 +195,7 @@ class CFDailyPlugin(Star):
         if note:
             note_html = f'<div class="section-title">备注</div><div class="note-content cf-content">{note}</div>'
 
-        bg_color = "#f2f5f8"  # 柔和背景色，可自行调整
+        bg_color = "#f2f5f8"
 
         tmpl = f'''
         <!DOCTYPE html>
@@ -216,7 +216,6 @@ class CFDailyPlugin(Star):
             </script>
             <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" id="MathJax-script" async></script>
             <style>
-                /* 背景样式：直接设置在 html 和 body 上，确保无白边 */
                 html, body {{
                     margin: 0;
                     padding: 0;
@@ -289,6 +288,19 @@ class CFDailyPlugin(Star):
         except Exception as e:
             logger.error(f"渲染图片失败: {e}")
             yield event.plain_result(f"图片生成失败，请直接访问：{problem_url}")
+
+    # --- 新增：重置当日使用次数（管理员或通用）---
+    @filter.command("cf重置")
+    async def reset_daily(self, event: AstrMessageEvent):
+        user_id = event.get_sender_id()
+        # 如果配置了 admin_id，则仅允许该管理员使用
+        if self.admin_id is not None and user_id != self.admin_id:
+            yield event.plain_result("❌ 权限不足，只有管理员可以重置。")
+            return
+
+        key = self._get_user_key(user_id)
+        await self.put_kv_data(key, "0")
+        yield event.plain_result("✅ 今日使用次数已重置为 0，可以继续使用「每日一题」了。")
 
     @filter.command("每日一题")
     async def daily_cf(self, event: AstrMessageEvent):
