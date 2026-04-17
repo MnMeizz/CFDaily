@@ -153,7 +153,7 @@ class CFDailyPlugin(Star):
             "note": note_html
         }
 
-    # --- 渲染图片并发送（加入了随机渐变与毛玻璃效果）---
+    # --- 渲染图片并发送（仅修改背景样式，其他完全不变）---
     async def _render_and_send(self, event: AstrMessageEvent, problem: dict):
         contest_id = problem.get("contestId")
         index = problem.get("index")
@@ -166,24 +166,16 @@ class CFDailyPlugin(Star):
             yield event.plain_result(f"获取详细题面失败，仅显示基础信息：\n标题: {problem.get('name')}\n难度: {rating}\n链接: {problem_url}")
             return
 
-        def clean_text(text):
+        def process_cf_html(text):
             if not text:
                 return ""
-            text = re.sub(r'\$\$\$(.*?)\$\$\$', r'<b>\1</b>', text, flags=re.DOTALL)
-            text = re.sub(r'</?(p|div|br)[^>]*>', '\n', text, flags=re.IGNORECASE)
-            text = re.sub(r'</?(li|tr)[^>]*>', '\n', text, flags=re.IGNORECASE)
-            text = re.sub(r'<[^>]+>', ' ', text)
-            text = text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&").replace("&nbsp;", " ")
-            text = re.sub(r' +', ' ', text)
-            text = re.sub(r'\n +', '\n', text)
-            text = re.sub(r' +\n', '\n', text)
-            text = re.sub(r'\n{3,}', '\n\n', text)
-            return text.strip()
+            text = re.sub(r'\$\$\$(.*?)\$\$\$', r'\\(\1\\)', text, flags=re.DOTALL)
+            return text
 
-        description = clean_text(statement["description"])
-        input_spec = clean_text(statement["input_spec"])
-        output_spec = clean_text(statement["output_spec"])
-        note = clean_text(statement["note"])
+        description = process_cf_html(statement["description"])
+        input_spec = process_cf_html(statement["input_spec"])
+        output_spec = process_cf_html(statement["output_spec"])
+        note = process_cf_html(statement["note"])
 
         samples_html = ""
         if statement["sample_tests"]:
@@ -199,14 +191,10 @@ class CFDailyPlugin(Star):
                 '''
         note_html = ""
         if note:
-            note_html = f'<div class="section-title">备注</div><div class="note-content">{note}</div>'
+            note_html = f'<div class="section-title">备注</div><div class="note-content cf-content">{note}</div>'
 
-        # 生成随机高明度渐变色彩 (确保背景浅色，文字清晰)
-        hue1 = random.randint(0, 360)
-        hue2 = (hue1 + random.randint(40, 120)) % 360  # 取一个相近色或对比色
-        bg_gradient = f"linear-gradient(135deg, hsl({hue1}, 80%, 85%), hsl({hue2}, 80%, 85%))"
+        bg_color = "#f2f5f8"  # 柔和背景色，可自行调整
 
-        # ---------- 新版带毛玻璃和渐变的 HTML 模板 ----------
         tmpl = f'''
         <!DOCTYPE html>
         <html>
@@ -215,8 +203,8 @@ class CFDailyPlugin(Star):
             <script>
                 window.MathJax = {{
                     tex: {{
-                        inlineMath: [['$', '$'], ['\\(', '\\)']],
-                        displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                        inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
+                        displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']],
                         processEscapes: true,
                         processEnvironments: true
                     }},
@@ -226,18 +214,23 @@ class CFDailyPlugin(Star):
             </script>
             <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" id="MathJax-script" async></script>
             <style>
+                /* 背景样式：直接设置在 html 和 body 上，确保无白边 */
+                html, body {{
+                    margin: 0;
+                    padding: 0;
+                    min-height: 100vh;
+                    background-color: {bg_color};
+                }}
                 body {{ 
                     font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; 
-                    background: {bg_gradient}; /* 随机渐变背景 */
-                    padding: 40px; 
-                    margin: 0; 
                     color: #24292e; 
-                    min-height: 100vh;
                     box-sizing: border-box;
+                    line-height: 1.6;
+                    padding: 40px;
                 }}
                 .glass-container {{
-                    background: rgba(255, 255, 255, 0.65); /* 半透明白色 */
-                    backdrop-filter: blur(16px); /* 毛玻璃模糊效果 */
+                    background: rgba(255, 255, 255, 0.65);
+                    backdrop-filter: blur(16px);
                     -webkit-backdrop-filter: blur(16px);
                     border-radius: 20px;
                     border: 1px solid rgba(255, 255, 255, 0.8);
@@ -254,13 +247,17 @@ class CFDailyPlugin(Star):
                 .info-label {{ font-size: 12px; color: #6a737d; text-transform: uppercase; }}
                 .info-value {{ font-size: 18px; font-weight: 600; }}
                 .section-title {{ font-size: 20px; font-weight: bold; margin: 25px 0 10px 0; border-bottom: 1px solid rgba(0, 0, 0, 0.05); padding-bottom: 5px; }}
+                
+                .cf-content p {{ margin: 0 0 15px 0; }}
+                .cf-content ul, .cf-content ol {{ margin: 0 0 15px 0; padding-left: 25px; }}
+                .cf-content li {{ margin-bottom: 5px; }}
+                
                 pre {{ background: rgba(255, 255, 255, 0.7); border: 1px solid rgba(255, 255, 255, 0.8); border-radius: 8px; padding: 15px; font-family: "Consolas", monospace; font-size: 14px; overflow-x: auto; white-space: pre-wrap; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); }}
                 .sample-block {{ margin-bottom: 20px; }}
                 .sample-title {{ font-weight: 600; margin: 10px 0 5px 0; }}
                 .note-content {{ background: rgba(255, 255, 255, 0.6); padding: 15px; border-left: 4px solid #8e9db0; border-radius: 0 8px 8px 0; }}
                 .tags {{ margin-top: 25px; padding-top: 15px; border-top: 1px solid rgba(0, 0, 0, 0.05); }}
                 .tag {{ display: inline-block; background: rgba(255, 255, 255, 0.8); padding: 6px 14px; margin: 0 8px 8px 0; border-radius: 20px; font-size: 14px; border: 1px solid rgba(255,255,255,0.9); box-shadow: 0 2px 5px rgba(0,0,0,0.04); }}
-                b {{ font-weight: 700; }}
             </style>
         </head>
         <body>
@@ -273,9 +270,9 @@ class CFDailyPlugin(Star):
                     <div class="info-item"><span class="info-label">时间限制</span><span class="info-value">{statement["time_limit"]}</span></div>
                     <div class="info-item"><span class="info-label">内存限制</span><span class="info-value">{statement["memory_limit"]}</span></div>
                 </div>
-                <div class="section-title">题目描述</div><div>{description}</div>
-                <div class="section-title">输入格式</div><div>{input_spec}</div>
-                <div class="section-title">输出格式</div><div>{output_spec}</div>
+                <div class="section-title">题目描述</div><div class="cf-content">{description}</div>
+                <div class="section-title">输入格式</div><div class="cf-content">{input_spec}</div>
+                <div class="section-title">输出格式</div><div class="cf-content">{output_spec}</div>
                 {samples_html}
                 {note_html}
                 <div class="tags"><strong>标签：</strong><br>{" ".join([f'<span class="tag">{tag}</span>' for tag in tags.split(", ")])}</div>
@@ -283,7 +280,6 @@ class CFDailyPlugin(Star):
         </body>
         </html>
         '''
-        # -------------------------------------------------------------
 
         try:
             url = await self.html_render(tmpl, {})
