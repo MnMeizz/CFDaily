@@ -153,7 +153,7 @@ class CFDailyPlugin(Star):
             "note": note_html
         }
 
-    # --- 渲染图片并发送（仅修改 clean_text 和 HTML 模板）---
+    # --- 渲染图片并发送（加入了随机渐变与毛玻璃效果）---
     async def _render_and_send(self, event: AstrMessageEvent, problem: dict):
         contest_id = problem.get("contestId")
         index = problem.get("index")
@@ -166,31 +166,19 @@ class CFDailyPlugin(Star):
             yield event.plain_result(f"获取详细题面失败，仅显示基础信息：\n标题: {problem.get('name')}\n难度: {rating}\n链接: {problem_url}")
             return
 
-        # ---------- 全新 clean_text，正确处理加粗、段落、公式保留 ----------
         def clean_text(text):
             if not text:
                 return ""
-            # 1. 先处理 Codeforces 特有的加粗标记：$$$ ... $$$ → <b>...</b>
             text = re.sub(r'\$\$\$(.*?)\$\$\$', r'<b>\1</b>', text, flags=re.DOTALL)
-
-            # 2. 将块级标签（段落、换行）转换为换行符
             text = re.sub(r'</?(p|div|br)[^>]*>', '\n', text, flags=re.IGNORECASE)
-            # 3. 将列表项、行内块元素等转换为换行（可选）
             text = re.sub(r'</?(li|tr)[^>]*>', '\n', text, flags=re.IGNORECASE)
-
-            # 4. 其他任何 HTML 标签都替换为一个空格，避免单词粘连
             text = re.sub(r'<[^>]+>', ' ', text)
-
-            # 5. 转义常见 HTML 实体（保留 LaTeX 需要的反斜杠等）
             text = text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&").replace("&nbsp;", " ")
-
-            # 6. 清理多余的空白
-            text = re.sub(r' +', ' ', text)          # 多个空格变一个
-            text = re.sub(r'\n +', '\n', text)       # 换行后空格去除
-            text = re.sub(r' +\n', '\n', text)       # 空格后换行去除
-            text = re.sub(r'\n{3,}', '\n\n', text)   # 最多保留两个连续换行
+            text = re.sub(r' +', ' ', text)
+            text = re.sub(r'\n +', '\n', text)
+            text = re.sub(r' +\n', '\n', text)
+            text = re.sub(r'\n{3,}', '\n\n', text)
             return text.strip()
-        # ---------------------------------------------------------------
 
         description = clean_text(statement["description"])
         input_spec = clean_text(statement["input_spec"])
@@ -213,13 +201,17 @@ class CFDailyPlugin(Star):
         if note:
             note_html = f'<div class="section-title">备注</div><div class="note-content">{note}</div>'
 
-        # ---------- HTML 模板：引入 MathJax 并删除底部链接 ----------
+        # 生成随机高明度渐变色彩 (确保背景浅色，文字清晰)
+        hue1 = random.randint(0, 360)
+        hue2 = (hue1 + random.randint(40, 120)) % 360  # 取一个相近色或对比色
+        bg_gradient = f"linear-gradient(135deg, hsl({hue1}, 80%, 85%), hsl({hue2}, 80%, 85%))"
+
+        # ---------- 新版带毛玻璃和渐变的 HTML 模板 ----------
         tmpl = f'''
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="UTF-8">
-            <!-- MathJax 3 配置，支持 \(...\)、\[...\]、$$...$$ 等 -->
             <script>
                 window.MathJax = {{
                     tex: {{
@@ -234,39 +226,60 @@ class CFDailyPlugin(Star):
             </script>
             <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" id="MathJax-script" async></script>
             <style>
-                body {{ font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; background: #fff; padding: 30px; max-width: 900px; margin: 0 auto; color: #24292e; }}
-                .header {{ border-bottom: 2px solid #e1e4e8; padding-bottom: 15px; margin-bottom: 20px; }}
-                .title {{ font-size: 28px; font-weight: bold; margin-bottom: 5px; }}
+                body {{ 
+                    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; 
+                    background: {bg_gradient}; /* 随机渐变背景 */
+                    padding: 40px; 
+                    margin: 0; 
+                    color: #24292e; 
+                    min-height: 100vh;
+                    box-sizing: border-box;
+                }}
+                .glass-container {{
+                    background: rgba(255, 255, 255, 0.65); /* 半透明白色 */
+                    backdrop-filter: blur(16px); /* 毛玻璃模糊效果 */
+                    -webkit-backdrop-filter: blur(16px);
+                    border-radius: 20px;
+                    border: 1px solid rgba(255, 255, 255, 0.8);
+                    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+                    padding: 40px; 
+                    max-width: 900px; 
+                    margin: 0 auto; 
+                }}
+                .header {{ border-bottom: 2px solid rgba(0, 0, 0, 0.05); padding-bottom: 15px; margin-bottom: 20px; }}
+                .title {{ font-size: 28px; font-weight: bold; margin-bottom: 5px; text-shadow: 0 1px 2px rgba(255,255,255,0.8); }}
                 .subtitle {{ color: #586069; font-size: 16px; }}
-                .info-bar {{ display: flex; gap: 30px; background: #f6f8fa; padding: 12px 20px; border-radius: 8px; margin: 20px 0; }}
+                .info-bar {{ display: flex; gap: 30px; background: rgba(255, 255, 255, 0.5); padding: 12px 20px; border-radius: 12px; margin: 20px 0; border: 1px solid rgba(255, 255, 255, 0.6); }}
                 .info-item {{ display: flex; flex-direction: column; }}
                 .info-label {{ font-size: 12px; color: #6a737d; text-transform: uppercase; }}
                 .info-value {{ font-size: 18px; font-weight: 600; }}
-                .section-title {{ font-size: 20px; font-weight: bold; margin: 25px 0 10px 0; border-bottom: 1px solid #eaecef; padding-bottom: 5px; }}
-                pre {{ background: #f6f8fa; border: 1px solid #e1e4e8; border-radius: 6px; padding: 12px; font-family: monospace; font-size: 14px; overflow-x: auto; white-space: pre-wrap; }}
+                .section-title {{ font-size: 20px; font-weight: bold; margin: 25px 0 10px 0; border-bottom: 1px solid rgba(0, 0, 0, 0.05); padding-bottom: 5px; }}
+                pre {{ background: rgba(255, 255, 255, 0.7); border: 1px solid rgba(255, 255, 255, 0.8); border-radius: 8px; padding: 15px; font-family: "Consolas", monospace; font-size: 14px; overflow-x: auto; white-space: pre-wrap; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); }}
                 .sample-block {{ margin-bottom: 20px; }}
                 .sample-title {{ font-weight: 600; margin: 10px 0 5px 0; }}
-                .note-content {{ background: #f8f9fa; padding: 15px; border-left: 4px solid #6a737d; border-radius: 0 6px 6px 0; }}
-                .tags {{ margin-top: 25px; padding-top: 15px; border-top: 1px solid #e1e4e8; }}
-                .tag {{ display: inline-block; background: #e1e4e8; padding: 4px 12px; margin: 0 8px 8px 0; border-radius: 20px; font-size: 14px; }}
+                .note-content {{ background: rgba(255, 255, 255, 0.6); padding: 15px; border-left: 4px solid #8e9db0; border-radius: 0 8px 8px 0; }}
+                .tags {{ margin-top: 25px; padding-top: 15px; border-top: 1px solid rgba(0, 0, 0, 0.05); }}
+                .tag {{ display: inline-block; background: rgba(255, 255, 255, 0.8); padding: 6px 14px; margin: 0 8px 8px 0; border-radius: 20px; font-size: 14px; border: 1px solid rgba(255,255,255,0.9); box-shadow: 0 2px 5px rgba(0,0,0,0.04); }}
                 b {{ font-weight: 700; }}
             </style>
         </head>
         <body>
-            <div class="header">
-                <div class="title">{statement["title"]}</div>
-                <div class="subtitle">Codeforces {contest_id}{index} · 难度分: {rating}</div>
+            <div class="glass-container">
+                <div class="header">
+                    <div class="title">{statement["title"]}</div>
+                    <div class="subtitle">Codeforces {contest_id}{index} · 难度分: {rating}</div>
+                </div>
+                <div class="info-bar">
+                    <div class="info-item"><span class="info-label">时间限制</span><span class="info-value">{statement["time_limit"]}</span></div>
+                    <div class="info-item"><span class="info-label">内存限制</span><span class="info-value">{statement["memory_limit"]}</span></div>
+                </div>
+                <div class="section-title">题目描述</div><div>{description}</div>
+                <div class="section-title">输入格式</div><div>{input_spec}</div>
+                <div class="section-title">输出格式</div><div>{output_spec}</div>
+                {samples_html}
+                {note_html}
+                <div class="tags"><strong>标签：</strong><br>{" ".join([f'<span class="tag">{tag}</span>' for tag in tags.split(", ")])}</div>
             </div>
-            <div class="info-bar">
-                <div class="info-item"><span class="info-label">时间限制</span><span class="info-value">{statement["time_limit"]}</span></div>
-                <div class="info-item"><span class="info-label">内存限制</span><span class="info-value">{statement["memory_limit"]}</span></div>
-            </div>
-            <div class="section-title">题目描述</div><div>{description}</div>
-            <div class="section-title">输入格式</div><div>{input_spec}</div>
-            <div class="section-title">输出格式</div><div>{output_spec}</div>
-            {samples_html}
-            {note_html}
-            <div class="tags"><strong>标签：</strong><br>{" ".join([f'<span class="tag">{tag}</span>' for tag in tags.split(", ")])}</div>
         </body>
         </html>
         '''
