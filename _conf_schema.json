@@ -1,0 +1,7 @@
+{
+    "daily_limit": {
+        "description": "每日一题每位用户可用次数",
+        "type": "int",
+        "default": 1
+    }
+}
