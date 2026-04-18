@@ -315,9 +315,27 @@ class CFDailyPlugin(Star):
             yield event.plain_result("获取题目列表失败，请稍后再试。")
             return
 
-        filtered = [p for p in problems if "rating" in p]
+        # 解析命令参数（支持 "每日一题 a b" 格式）
+        message = event.message_str.strip()
+        parts = message.split()
+        a, b = None, None
+        if len(parts) >= 3:  # 格式：/每日一题 a b
+            try:
+                a = int(parts[1])
+                b = int(parts[2])
+            except ValueError:
+                pass  # 转换失败则按无参数处理
+
+        # 根据是否有有效区间参数进行过滤
+        if a is not None and b is not None and a <= b:
+            filtered = [p for p in problems if "rating" in p and a <= p["rating"] <= b]
+            range_desc = f"难度 {a}~{b}"
+        else:
+            filtered = [p for p in problems if "rating" in p]
+            range_desc = "任意难度"
+
         if not filtered:
-            yield event.plain_result("暂时没有合适的题目，请稍后再试。")
+            yield event.plain_result(f"在 {range_desc} 区间内暂时没有合适的题目，请稍后再试或调整范围。")
             return
 
         problem = random.choice(filtered)
@@ -329,7 +347,9 @@ class CFDailyPlugin(Star):
         contest_id = problem.get("contestId")
         index = problem.get("index")
         problem_url = f"https://codeforces.com/problemset/problem/{contest_id}/{index}"
-        yield event.plain_result(f"今日一题已送达！\n标题: {name}\n难度分: {rating}\n标签: {tags}\n链接：{problem_url}\n剩余次数: {remaining-1}/{self.daily_limit}")
+        yield event.plain_result(
+            f"今日一题已送达！\n标题: {name}\n难度分: {rating}\n标签: {tags}\n链接：{problem_url}\n剩余次数: {remaining-1}/{self.daily_limit}"
+        )
 
         async for result in self._render_and_send(event, problem):
             yield result
